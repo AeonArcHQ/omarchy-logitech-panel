@@ -35,22 +35,23 @@ TestCase {
     var mouse = keyboard({ id: "m", name: "MX Master 3S", kind: "mouse", battery: { percentage: 40, status: "discharging" } })
     var asleep = keyboard({ id: "k", name: "K380", online: false, battery: { percentage: 3, status: "discharging" } })
     var snap = snapOf([keyboard(), mouse, asleep])
-    compare(Model.barView(snap, true), { text: "\u{F037D} 40%", active: false, dimmed: false })
-    compare(Model.barView(snap, false).text, "\u{F037D}")
+    compare(Model.barView(snap, true), { glyph: "\u{F037D}", label: "40%", active: false, dimmed: false })
+    compare(Model.barView(snap, false), { glyph: "\u{F037D}", label: "", active: false, dimmed: false })
   }
 
   function test_low_battery_is_highlighted_only_while_discharging() {
     var low = snapOf([keyboard({ battery: { percentage: 15, status: "discharging" } })])
     compare(Model.barView(low, true).active, true)
     var charging = snapOf([keyboard({ battery: { percentage: 10, status: "charging" } })])
-    compare(Model.barView(charging, true), { text: "\u{F030C} \u{F140B} 10%", active: false, dimmed: false })
+    compare(Model.barView(charging, true), { glyph: "\u{F030C}", label: "\u{F140B} 10%", active: false, dimmed: false })
+    compare(Model.barView(charging, false), { glyph: "\u{F030C}", label: "\u{F140B}", active: false, dimmed: false })
     var fine = snapOf([keyboard({ battery: { percentage: 16, status: "discharging" } })])
     compare(Model.barView(fine, true).active, false)
   }
 
   function test_numbers_go_through_the_language_formatter() {
     var snap = snapOf([keyboard({ battery: { percentage: 42, status: "discharging" } })])
-    compare(Model.barView(snap, true, function(n) { return "٤٢" }).text, "\u{F030C} ٤٢%")
+    compare(Model.barView(snap, true, function(n) { return "٤٢" }), { glyph: "\u{F030C}", label: "٤٢%", active: false, dimmed: false })
   }
 
   function test_phases_before_devices_show() {
@@ -63,7 +64,7 @@ TestCase {
 
   function test_a_blocker_shows_the_alert_and_only_itself_in_the_tooltip() {
     var snap = { blocker: "solaar", inventory: "", devices: [] }
-    compare(Model.barView(snap, true), { text: "\u{F0026}", active: true, dimmed: false })
+    compare(Model.barView(snap, true), { glyph: "\u{F0026}", label: "", active: true, dimmed: false })
     compare(Model.tooltip(snap, t), "phase.solaar.title")
     verify(Model.FIXES.solaar.indexOf("solaar") >= 0)
   }
@@ -72,12 +73,12 @@ TestCase {
     compare(Model.barView(null, true).dimmed, true)
     compare(Model.barView({ blocker: null, inventory: "loading", devices: [] }, true).dimmed, true)
     var asleep = snapOf([keyboard({ online: false })])
-    compare(Model.barView(asleep, true), { text: "\u{F030C}", active: false, dimmed: true })
+    compare(Model.barView(asleep, true), { glyph: "\u{F030C}", label: "", active: false, dimmed: true })
   }
 
   function test_an_online_device_without_a_level_does_not_dim_the_icon() {
     var mute = keyboard({ name: "MX Master 3S", kind: "mouse", battery: { status: "unknown" } })
-    compare(Model.barView(snapOf([mute]), true), { text: "\u{F037D}", active: false, dimmed: false })
+    compare(Model.barView(snapOf([mute]), true), { glyph: "\u{F037D}", label: "", active: false, dimmed: false })
     var asleep = keyboard({ id: "k", name: "K380", online: false })
     compare(Model.barView(snapOf([mute, asleep]), true).dimmed, false)
   }

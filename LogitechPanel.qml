@@ -53,16 +53,15 @@ Panel {
     function refresh(): string { logi.refresh(); return "ok" }
   }
 
-  WidgetButton {
+  BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
     readonly property var view: Model.barView(root.snap, root.setting("showPercentage", true), root.num)
-    text: view.text
+    text: view.glyph
+    labelText: view.label
     active: view.active
     dimmed: view.dimmed
-    fontSize: Style.font.caption
-    horizontalMargin: 6
     tooltipText: Model.tooltip(root.snap, root.tr, root.num)
     onPressed: function(buttonCode) { root.toggle() }
   }

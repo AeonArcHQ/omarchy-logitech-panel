@@ -81,11 +81,14 @@ function isBlocker(phaseName) {
   return BLOCKERS.indexOf(phaseName) >= 0
 }
 
+// The bar entry as the shell's icon contract wants it (plugins/bar README,
+// "Icon geometry"): `glyph` is the single icon glyph BarIconButton renders,
+// `label` the text beside it.
 function barView(snap, showPercentage, formatNumber) {
   var format = formatNumber || String
   var current = phase(snap)
-  if (isBlocker(current)) return { text: GLYPH_ALERT, active: true, dimmed: false }
-  if (current !== "ready") return { text: GLYPH.keyboard, active: false, dimmed: true }
+  if (isBlocker(current)) return { glyph: GLYPH_ALERT, label: "", active: true, dimmed: false }
+  if (current !== "ready") return { glyph: GLYPH.keyboard, label: "", active: false, dimmed: true }
   var device = barBatteryDevice(snap.devices)
   if (device === null) {
     // Online Devices without a level still mean "something is on": show the
@@ -95,12 +98,12 @@ function barView(snap, showPercentage, formatNumber) {
       if (snap.devices[i].online) { online = snap.devices[i]; break }
     }
     var shown = online || snap.devices[0]
-    return { text: GLYPH[shown.kind] || GLYPH.other, active: false, dimmed: online === null }
+    return { glyph: GLYPH[shown.kind] || GLYPH.other, label: "", active: false, dimmed: online === null }
   }
-  var text = GLYPH[device.kind] || GLYPH.other
-  if (device.battery.status === "charging") text += " " + GLYPH_CHARGING
-  if (showPercentage) text += " " + format(device.battery.percentage) + "%"
-  return { text: text, active: isLow(device), dimmed: false }
+  var label = ""
+  if (device.battery.status === "charging") label = GLYPH_CHARGING
+  if (showPercentage) label += (label === "" ? "" : " ") + format(device.battery.percentage) + "%"
+  return { glyph: GLYPH[device.kind] || GLYPH.other, label: label, active: isLow(device), dimmed: false }
 }
 
 // One line per Device, or only the Blocker when there is one.
