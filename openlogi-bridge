@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""Reads and changes Logitech Devices through OpenLogi for the bar widget.
+
+  openlogi-bridge snapshot [--details]
+      One JSON object: the Blocker (or null), OpenLogi's inventory state and
+      the Devices. With --details, each online Device also carries the state
+      of the Capabilities the panel shows (Fn lock, backlight, Easy-Switch).
+  openlogi-bridge set <device-id> fn-lock on|off
+  openlogi-bridge set <device-id> backlight on|off|auto:on|auto:off|level:<n>
+      One JSON object: {"ok": true} or {"ok": false, "error": <message>}.
+
+The bridge never speaks HID++ itself (docs/adr/0001): every read and change
+goes through the `openlogi` command and its running Agent. OpenLogi's output
+is treated as untrusted: fields are typed and bounded before the shell sees
+them, and values sent back to OpenLogi come only from a fixed vocabulary.
+"""
+
+import json
+import re
+import shutil
+import subprocess
+import sys
+
+TIMEOUT = 10
+MAX_DEVICES = 16
+MAX_NAME = 64
+MAX_ID = 128
+MAX_TEXT = 300
+MAX_CHANNELS = 8
+KINDS = ("keyboard", "mouse")
+BATTERY_STATES = ("discharging", "charging", "full", "unknown")
+CAPABILITIES = ("backlight", "fn_lock", "easy_switch")
+BACKLIGHT_ACTIONS = {"on": ["on"], "off": ["off"], "auto:on": ["auto", "on"], "auto:off": ["auto", "off"]}
+MAX_BACKLIGHT_LEVEL = 31
+
+
+class OpenLogiMissing(Exception):
+    pass
+
+
+def run_openlogi(args):
+    """Runs one openlogi command and returns (exit code, stdout, stderr)."""
+    executable = shutil.which("openlogi")
+    if executable is None:
+        raise OpenLogiMissing()
+    try:
+        done = subprocess.run([executable] + args, capture_output=True, text=True, timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return 124, "", "Error: openlogi did not answer within %d seconds" % TIMEOUT
+    return done.returncode, done.stdout, done.stderr
+
+
+def solaar_running():
+    # Solaar and OpenLogi cannot share a Device: whichever opened it first owns it.
+    return subprocess.run(["pgrep", "-x", "solaar"], capture_output=True).returncode == 0
+
+
+def bounded(value, limit):
+    text = value if isinstance(value, str) else ""
+    text = "".join(ch for ch in text if ch.isprintable())
+    return text[:limit]
+
+
+def error_line(text):
+    lines = str(text or "").splitlines()
+    # anyhow-style errors name the action first and the reason under
+    # "Caused by:"; the reason is what the panel should show.
+    if "Caused by:" in [line.strip() for line in lines]:
+        lines = lines[[line.strip() for line in lines].index("Caused by:") + 1:]
+        lines = [re.sub(r"^\s*\d+:\s*", "", line) for line in lines]
+    for line in lines:
+        line = line.strip()
+        if line:
+            if line.startswith("Error:"):
+                line = line[len("Error:"):].strip()
+            return bounded(line, MAX_TEXT) or "openlogi failed"
+    return "openlogi failed without a message"
+
+
+def parse_envelope(text):
+    """OpenLogi's automation envelope, or None when it is not one this bridge speaks."""
+    try:
+        envelope = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(envelope, dict) or envelope.get("schema_version") != 1 or not isinstance(envelope.get("ok"), bool):
+        return None
+    return envelope
+
+
+def envelope_error(envelope):
+    error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
+    return bounded(error.get("code"), 64), bounded(error.get("message"), MAX_TEXT) or "openlogi refused"
+
+
+def parse_backlight(text):
+    """The backlight state from `openlogi backlight` text, preferring the read-back after a change."""
+    state = None
+    offers = []
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        if line.startswith("current:") and state is None:
+            state = line[len("current:"):]
+        elif line.startswith("read-back:"):
+            state = line[len("read-back:"):]
+        elif line.startswith("offers:"):
+            offers = [item.strip() for item in line[len("offers:"):].split(",") if item.strip()]
+    if state is None:
+        return None
+    fields = dict(re.findall(r"([a-z-]+)=(.+?)(?=\s+[a-z-]+=|$)", state.strip()))
+    level = re.match(r"(\d+)/(\d+)$", fields.get("level", ""))
+    if level is None:
+        return None
+    return {
+        "on": fields.get("enabled") == "true",
+        "auto": fields.get("mode", "").startswith("automatic"),
+        "level": int(level.group(1)),
+        # OpenLogi prints the highest level, counting from 0.
+        "levels": int(level.group(2)) + 1,
+        "offers": [bounded(item, 32) for item in offers[:8]],
+    }
+
+
+def clean_device(raw):
+    if not isinstance(raw, dict):
+        return None
+    device_id = bounded(raw.get("id"), MAX_ID)
+    if not device_id:
+        return None
+    battery = raw.get("battery") if isinstance(raw.get("battery"), dict) else {}
+    percentage = battery.get("percentage")
+    if not isinstance(percentage, int) or isinstance(percentage, bool) or not 0 <= percentage <= 100:
+        percentage = None
+    status = battery.get("status") if battery.get("status") in BATTERY_STATES else "unknown"
+    capabilities = raw.get("capabilities") if isinstance(raw.get("capabilities"), dict) else {}
+    return {
+        "id": device_id,
+        "name": bounded(raw.get("name"), MAX_NAME) or device_id,
+        "kind": raw.get("kind") if raw.get("kind") in KINDS else "other",
+        "online": raw.get("online") is True,
+        "battery": {"percentage": percentage, "status": status},
+        "capabilities": {name: capabilities.get(name) is True for name in CAPABILITIES},
+    }
+
+
+def read_devices(openlogi):
+    """(blocker, inventory, devices) from `openlogi api devices`."""
+    code, out, err = openlogi(["api", "devices"])
+    envelope = parse_envelope(out)
+    if envelope is None:
+        return "incompatible", "", []
+    if not envelope["ok"]:
+        error_code, _ = envelope_error(envelope)
+        return ("agent" if error_code == "agent_unavailable" else "incompatible"), "", []
+    data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+    raw_devices = data.get("devices") if isinstance(data.get("devices"), list) else []
+    devices = [d for d in (clean_device(raw) for raw in raw_devices[:MAX_DEVICES]) if d is not None]
+    return None, bounded(data.get("inventory"), 32), devices
+
+
+def read_api(openlogi, args):
+    """The data of one automation command, or raises ValueError with OpenLogi's message."""
+    code, out, err = openlogi(args)
+    envelope = parse_envelope(out)
+    if envelope is None:
+        raise ValueError(error_line(err or out))
+    if not envelope["ok"]:
+        raise ValueError(envelope_error(envelope)[1])
+    return envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+
+
+def read_fn_lock(openlogi, device):
+    data = read_api(openlogi, ["api", "fn-lock", "--device", device["id"]])
+    if not isinstance(data.get("fn_lock"), bool):
+        raise ValueError("openlogi gave no Fn lock state")
+    return data["fn_lock"]
+
+
+def read_easy_switch(openlogi, device):
+    data = read_api(openlogi, ["api", "easy-switch", "--device", device["id"]])
+    channels = []
+    for raw in (data.get("channels") if isinstance(data.get("channels"), list) else [])[:MAX_CHANNELS]:
+        if isinstance(raw, dict) and isinstance(raw.get("channel"), int) and not isinstance(raw.get("channel"), bool):
+            channels.append({"channel": raw["channel"], "paired": raw.get("paired") is True,
+                             "name": bounded(raw.get("name"), MAX_NAME)})
+    current = data.get("current_channel")
+    return {"current": current if isinstance(current, int) and not isinstance(current, bool) else 0,
+            "channels": channels}
+
+
+def read_backlight(openlogi, device):
+    code, out, err = openlogi(["backlight", "--device", device["name"], "status"])
+    parsed = parse_backlight(out) if code == 0 else None
+    if parsed is None:
+        raise ValueError(error_line(err or out))
+    return parsed
+
+
+DETAILS = (("fn_lock", read_fn_lock), ("backlight", read_backlight), ("easy_switch", read_easy_switch))
+
+
+def snapshot(openlogi, details, solaar):
+    try:
+        blocker, inventory, devices = read_devices(openlogi)
+    except OpenLogiMissing:
+        return {"blocker": "missing", "inventory": "", "devices": []}
+    if blocker is None and solaar:
+        blocker = "solaar"
+    if details and blocker is None:
+        for device in devices:
+            if not device["online"]:
+                continue
+            errors = {}
+            for name, reader in DETAILS:
+                if not device["capabilities"][name]:
+                    continue
+                try:
+                    device[name] = reader(openlogi, device)
+                except ValueError as error:
+                    errors[name] = str(error)
+            if errors:
+                device["errors"] = errors
+    return {"blocker": blocker, "inventory": inventory, "devices": devices}
+
+
+def change_args(device, setting, value):
+    """The openlogi command line for one change, or None when the value is outside the vocabulary."""
+    if setting == "fn-lock" and value in ("on", "off"):
+        return ["api", "fn-lock", "--device", device["id"], "--set", value, "--save"]
+    if setting == "backlight":
+        if value in BACKLIGHT_ACTIONS:
+            return ["backlight", "--device", device["name"]] + BACKLIGHT_ACTIONS[value]
+        match = re.fullmatch(r"level:(\d{1,2})", value)
+        if match and int(match.group(1)) <= MAX_BACKLIGHT_LEVEL:
+            return ["backlight", "--device", device["name"], "level", str(int(match.group(1)))]
+    return None
+
+
+def change(openlogi, device_id, setting, value):
+    # Check the vocabulary before talking to OpenLogi at all.
+    if change_args({"id": device_id, "name": ""}, setting, value) is None:
+        return {"ok": False, "error": "invalid-change"}
+    try:
+        blocker, _, devices = read_devices(openlogi)
+    except OpenLogiMissing:
+        return {"ok": False, "error": "missing"}
+    if blocker is not None:
+        return {"ok": False, "error": blocker}
+    device = next((d for d in devices if d["id"] == device_id and d["online"]), None)
+    if device is None:
+        return {"ok": False, "error": "device-gone"}
+    args = change_args(device, setting, value)
+    code, out, err = openlogi(args)
+    if args[0] == "api":
+        envelope = parse_envelope(out)
+        if envelope is not None and envelope["ok"]:
+            return {"ok": True}
+        return {"ok": False, "error": envelope_error(envelope)[1] if envelope else error_line(err or out)}
+    if code == 0:
+        return {"ok": True}
+    return {"ok": False, "error": error_line(err or out)}
+
+
+def main(argv):
+    if len(argv) >= 1 and argv[0] == "snapshot" and argv[1:] in ([], ["--details"]):
+        result = snapshot(run_openlogi, details=argv[1:] == ["--details"], solaar=solaar_running())
+    elif len(argv) == 4 and argv[0] == "set":
+        try:
+            result = change(run_openlogi, argv[1], argv[2], argv[3])
+        except OpenLogiMissing:
+            result = {"ok": False, "error": "missing"}
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

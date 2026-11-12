@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "com.aeonarc.logitech-panel",
+  "name": "Logitech Panel",
+  "version": "1.0.0",
+  "author": "Aeon Arc",
+  "license": "MIT",
+  "description": "Logitech keyboards and mice in the Omarchy bar: battery, backlight, Fn lock and Easy-Switch channels, through OpenLogi. Not affiliated with OpenLogi or Logitech.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "LogitechPanel.qml"
+  },
+  "barWidget": {
+    "displayName": "Logitech Panel",
+    "description": "Battery of your Logitech keyboards and mice; click for backlight, Fn lock and Easy-Switch channels. Needs OpenLogi (openlogi-bin from the AUR).",
+    "category": "Devices",
+    "aliases": ["logitech", "logi", "openlogi", "keyboard", "mx keys", "keyboard battery", "backlight"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "showPercentage": true,
+      "lowBatteryWarnings": true
+    },
+    "schema": [
+      {
+        "key": "showPercentage",
+        "type": "boolean",
+        "label": "Show percentage",
+        "description": "Show the battery percentage next to the device icon. Off leaves only the icon; the tooltip still has every level.",
+        "defaultValue": true
+      },
+      {
+        "key": "lowBatteryWarnings",
+        "type": "boolean",
+        "label": "Low battery warnings",
+        "description": "Send a notification when a device falls to 15%, and again at 5%, once per discharge.",
+        "defaultValue": true
+      }
+    ]
+  }
+}

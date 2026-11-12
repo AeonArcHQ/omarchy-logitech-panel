@@ -7,3 +7,4 @@ The plugin reads and changes Devices only through OpenLogi's JSON automation API
 - OpenLogi is a hard requirement. The plugin does not install it; when it is missing or the Agent is down, the panel names the Blocker and the command that fixes it.
 - Device ids are OpenLogi route ids: opaque, refreshed after every reconnect, and kept on the machine because they may carry hardware identity.
 - Bugs in device behaviour (for example AprilNEA/OpenLogi#1723) are reported upstream, not worked around with our own protocol code.
+- Easy-Switch is read-only: OpenLogi 0.9.0 lists and renames Channels but cannot switch to one (AprilNEA/OpenLogi#650). The panel shows the Channels and gains switching only when OpenLogi does.
