@@ -16,7 +16,7 @@ PHASES = ["starting", "searching", "none", "missing", "agent", "solaar", "incomp
 BUILT = (
     ["phase.%s.title" % p for p in PHASES]
     + ["battery." + s for s in ["discharging", "charging", "full", "unknown", "offline"]]
-    + ["change." + c for c in ["failed", "device-gone", "invalid-change", "missing", "agent", "solaar", "incompatible"]]
+    + ["change." + c for c in ["failed", "device-gone", "ambiguous-name", "invalid-change", "missing", "agent", "solaar", "incompatible"]]
     + ["warning.low", "warning.critical", "fnLock.onNote", "fnLock.offNote"]
 )
 LITERAL = re.compile(r'\b(?:tr|t)\("([A-Za-z][\w.-]*)"\)')

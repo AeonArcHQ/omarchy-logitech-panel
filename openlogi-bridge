@@ -22,6 +22,11 @@ import subprocess
 import sys
 
 TIMEOUT = 10
+# What run_openlogi reports when openlogi does not answer in time.
+TIMEOUT_EXIT = 124
+# Envelope error codes that name a version or schema problem; every other
+# well-formed refusal means the Agent could not serve the request.
+SCHEMA_ERRORS = ("unsupported_schema", "unsupported_version", "incompatible")
 MAX_DEVICES = 16
 MAX_NAME = 64
 MAX_ID = 128
@@ -46,7 +51,7 @@ def run_openlogi(args):
     try:
         done = subprocess.run([executable] + args, capture_output=True, text=True, timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
-        return 124, "", "Error: openlogi did not answer within %d seconds" % TIMEOUT
+        return TIMEOUT_EXIT, "", "Error: openlogi did not answer within %d seconds" % TIMEOUT
     return done.returncode, done.stdout, done.stderr
 
 
@@ -148,10 +153,12 @@ def read_devices(openlogi):
     code, out, err = openlogi(["api", "devices"])
     envelope = parse_envelope(out)
     if envelope is None:
-        return "incompatible", "", []
+        # A timeout is the Agent not answering; only output that is not an
+        # OpenLogi envelope at all is incompatible.
+        return ("agent" if code == TIMEOUT_EXIT else "incompatible"), "", []
     if not envelope["ok"]:
         error_code, _ = envelope_error(envelope)
-        return ("agent" if error_code == "agent_unavailable" else "incompatible"), "", []
+        return ("incompatible" if error_code in SCHEMA_ERRORS else "agent"), "", []
     data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
     raw_devices = data.get("devices") if isinstance(data.get("devices"), list) else []
     devices = [d for d in (clean_device(raw) for raw in raw_devices[:MAX_DEVICES]) if d is not None]
@@ -188,7 +195,18 @@ def read_easy_switch(openlogi, device):
             "channels": channels}
 
 
-def read_backlight(openlogi, device):
+def ambiguous_name(device, devices):
+    """True when `openlogi backlight --device <name>` could match another online Device."""
+    name = device["name"].strip().lower()
+    if not name:
+        return True
+    return any(other is not device and other["online"] and name in other["name"].strip().lower()
+               for other in devices)
+
+
+def read_backlight(openlogi, device, devices):
+    if ambiguous_name(device, devices):
+        raise ValueError("ambiguous-name")
     code, out, err = openlogi(["backlight", "--device", device["name"], "status"])
     parsed = parse_backlight(out) if code == 0 else None
     if parsed is None:
@@ -196,7 +214,9 @@ def read_backlight(openlogi, device):
     return parsed
 
 
-DETAILS = (("fn_lock", read_fn_lock), ("backlight", read_backlight), ("easy_switch", read_easy_switch))
+def detail_readers(devices):
+    return (("fn_lock", read_fn_lock), ("backlight", lambda o, d: read_backlight(o, d, devices)),
+            ("easy_switch", read_easy_switch))
 
 
 def snapshot(openlogi, details, solaar):
@@ -211,7 +231,7 @@ def snapshot(openlogi, details, solaar):
             if not device["online"]:
                 continue
             errors = {}
-            for name, reader in DETAILS:
+            for name, reader in detail_readers(devices):
                 if not device["capabilities"][name]:
                     continue
                 try:
@@ -249,6 +269,10 @@ def change(openlogi, device_id, setting, value):
     device = next((d for d in devices if d["id"] == device_id and d["online"]), None)
     if device is None:
         return {"ok": False, "error": "device-gone"}
+    # `openlogi backlight --device` matches a name substring; never aim at a
+    # Device whose name also matches another online Device.
+    if setting == "backlight" and ambiguous_name(device, devices):
+        return {"ok": False, "error": "ambiguous-name"}
     args = change_args(device, setting, value)
     code, out, err = openlogi(args)
     if args[0] == "api":

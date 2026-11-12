@@ -160,6 +160,18 @@ class SnapshotTest(unittest.TestCase):
         newer = dict(DEVICES, schema_version=2)
         self.assertEqual(bridge.snapshot(healthy(**{"api devices": (0, newer, "")}), False, False)["blocker"], "incompatible")
         self.assertEqual(bridge.snapshot(healthy(**{"api devices": (0, "not json", "")}), False, False)["blocker"], "incompatible")
+        refused = {"schema_version": 1, "ok": False, "error": {
+            "code": "unsupported_schema", "message": "this bridge speaks schema 1"}}
+        self.assertEqual(bridge.snapshot(healthy(**{"api devices": (1, refused, "")}), False, False)["blocker"], "incompatible")
+
+    def test_a_timeout_is_the_agent_not_an_incompatible_openlogi(self):
+        timed_out = healthy(**{"api devices": (124, "", "Error: openlogi did not answer within 10 seconds")})
+        self.assertEqual(bridge.snapshot(timed_out, details=False, solaar=False)["blocker"], "agent")
+
+    def test_an_unknown_envelope_error_is_the_agent_not_incompatible(self):
+        refused = {"schema_version": 1, "ok": False, "error": {
+            "code": "hidpp_busy", "message": "the device did not answer"}}
+        self.assertEqual(bridge.snapshot(healthy(**{"api devices": (1, refused, "")}), False, False)["blocker"], "agent")
 
     def test_device_fields_are_bounded_and_typed(self):
         hostile = json.loads(json.dumps(DEVICES))
@@ -202,6 +214,29 @@ class ChangeTest(unittest.TestCase):
     def test_an_unknown_device_is_refused(self):
         result = bridge.change(healthy(), "direct 046d:0000", "fn-lock", "on")
         self.assertEqual(result, {"ok": False, "error": "device-gone"})
+
+    def test_a_backlight_change_refuses_a_name_that_matches_another_device(self):
+        devices = json.loads(json.dumps(DEVICES))
+        devices["data"]["devices"].append(
+            dict(devices["data"]["devices"][0], id="bolt 046d:c548", name="MX Keys"))
+        fake = healthy(**{"api devices": (0, devices, "")})
+        self.assertEqual(bridge.change(fake, "bolt 046d:c548", "backlight", "off"),
+                         {"ok": False, "error": "ambiguous-name"})
+        self.assertEqual(fake.calls, [["api", "devices"]])
+
+    def test_the_detail_read_stores_an_error_instead_of_reading_the_wrong_device(self):
+        devices = json.loads(json.dumps(DEVICES))
+        devices["data"]["devices"].append(
+            dict(devices["data"]["devices"][0], id="bolt 046d:c548", name="MX Keys"))
+        fake = healthy(**{"api devices": (0, devices, ""),
+                          "api fn-lock --device bolt 046d:c548": (0, FN_LOCK, ""),
+                          "api easy-switch --device bolt 046d:c548": (0, EASY_SWITCH, "")})
+        snap = bridge.snapshot(fake, details=True, solaar=False)
+        mx_keys = next(d for d in snap["devices"] if d["id"] == "bolt 046d:c548")
+        self.assertEqual(mx_keys["errors"]["backlight"], "ambiguous-name")
+        self.assertNotIn("backlight", mx_keys)
+        for call in fake.calls:
+            self.assertNotEqual(call[:3], ["backlight", "--device", "MX Keys"])
 
     def test_a_refused_change_carries_openlogi_s_message(self):
         failing = healthy(**{"backlight --device MX Keys Mini": (1, "", "Error: the keyboard did not answer\n")})

@@ -49,10 +49,7 @@ Panel {
     target: root.ipcTarget
     function open(): void { root.open() }
     function close(): void { root.close() }
-    function show(): void { root.open() }
-    function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function status(): string { return JSON.stringify(logi.snap) }
     function refresh(): string { logi.refresh(); return "ok" }
   }
 
@@ -224,13 +221,6 @@ Panel {
       color: root.dim
     }
 
-    PlainText {
-      width: parent.width
-      visible: block.failure !== null
-      text: block.failure ? block.failure.message : ""
-      color: root.urgent
-    }
-
     // ---------- Backlight ----------
     // Each section waits for its detail (or its read error), so opening the
     // panel never flashes an empty header.
@@ -268,6 +258,11 @@ Panel {
         text: root.tr("backlight.autoNote")
         color: root.dim
       }
+      ChangeError {
+        device: block.device
+        failure: block.failure
+        setting: "backlight"
+      }
     }
 
     // ---------- Fn lock ----------
@@ -287,6 +282,11 @@ Panel {
         width: parent.width
         text: root.tr(block.device.fn_lock === true ? "fnLock.onNote" : "fnLock.offNote")
         color: root.dim
+      }
+      ChangeError {
+        device: block.device
+        failure: block.failure
+        setting: "fn-lock"
       }
     }
 
@@ -335,6 +335,17 @@ Panel {
     }
   }
 
+  // The last failed change to one setting, shown inside that setting's
+  // Section; a Device offline shows nothing because nothing can be sent.
+  component ChangeError: PlainText {
+    property var device: ({})
+    property var failure: null
+    property string setting: ""
+    visible: !!device.online && !!failure && failure.setting === setting
+    text: visible ? failure.message : ""
+    color: root.urgent
+  }
+
   // A titled block, laid out like the sections of omarchy.monitor.
   component Section: Column {
     property string title: ""
@@ -349,7 +360,7 @@ Panel {
     PlainText {
       width: parent.width
       visible: parent.error !== ""
-      text: Model.fill(root.tr("detail.error"), [parent.error])
+      text: Model.detailError(parent.error, root.tr)
       color: root.urgent
     }
     Column {

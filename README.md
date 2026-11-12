@@ -26,7 +26,7 @@ not affiliated with OpenLogi or Logitech.
   installs or starts anything by itself.
 - Settings: `showPercentage` (default on) and `lowBatteryWarnings` (default
   on).
-- IPC: `omarchy-shell com.aeonarc.logitech-panel open|close|toggle|status|refresh`.
+- IPC: `omarchy-shell com.aeonarc.logitech-panel open|close|toggle|refresh`.
 
 Tested only with an MX Keys Mini over Bluetooth. Other devices OpenLogi lists
 show up with whatever controls they announce; reports are welcome.

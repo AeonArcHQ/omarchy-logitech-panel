@@ -75,6 +75,13 @@ TestCase {
     compare(Model.barView(asleep, true), { text: "\u{F030C}", active: false, dimmed: true })
   }
 
+  function test_an_online_device_without_a_level_does_not_dim_the_icon() {
+    var mute = keyboard({ name: "MX Master 3S", kind: "mouse", battery: { status: "unknown" } })
+    compare(Model.barView(snapOf([mute]), true), { text: "\u{F037D}", active: false, dimmed: false })
+    var asleep = keyboard({ id: "k", name: "K380", online: false })
+    compare(Model.barView(snapOf([mute, asleep]), true).dimmed, false)
+  }
+
   function test_tooltip_has_one_line_per_device() {
     var asleep = keyboard({ id: "k", name: "K380", online: false })
     compare(Model.tooltip(snapOf([keyboard(), asleep]), t), "MX Keys Mini — 100%\nK380 — offline")
@@ -119,6 +126,38 @@ TestCase {
     step = Model.warnings(step.memory, [keyboard({ online: false })])
     step = Model.warnings(step.memory, [keyboard({ battery: { percentage: 10, status: "discharging" } })])
     compare(step.notify, [])
+  }
+
+  function test_small_bounces_and_unknown_status_do_not_warn_twice() {
+    var at = function(percentage, status) { return [keyboard({ battery: { percentage: percentage, status: status || "discharging" } })] }
+    var step = Model.warnings({}, at(15))
+    compare(step.notify.length, 1)
+    step = Model.warnings(step.memory, at(16))
+    step = Model.warnings(step.memory, at(15))
+    compare(step.notify, [])
+    step = Model.warnings(step.memory, at(15, "unknown"))
+    step = Model.warnings(step.memory, at(14))
+    compare(step.notify, [])
+  }
+
+  function test_the_warning_memory_follows_the_name_not_the_id() {
+    var at = function(id) { return [keyboard({ id: id, battery: { percentage: 12, status: "discharging" } })] }
+    var step = Model.warnings({}, at("id-a"))
+    compare(step.notify.length, 1)
+    step = Model.warnings(step.memory, at("id-b"))
+    compare(step.notify, [])
+  }
+
+  function test_charging_or_recovering_past_twenty_starts_a_new_discharge() {
+    var at = function(percentage, status) { return [keyboard({ battery: { percentage: percentage, status: status || "discharging" } })] }
+    var step = Model.warnings({}, at(14))
+    compare(step.notify.length, 1)
+    step = Model.warnings(step.memory, at(14, "charging"))
+    step = Model.warnings(step.memory, at(14))
+    compare(step.notify.map(function(n) { return n.threshold }), [15])
+    step = Model.warnings(step.memory, at(21))
+    step = Model.warnings(step.memory, at(14))
+    compare(step.notify.map(function(n) { return n.threshold }), [15])
   }
 
   function test_names_reach_notifications_as_plain_text() {
@@ -170,5 +209,12 @@ TestCase {
     compare(Model.channelLabel({ channel: 1, paired: true, name: "omarchy" }, t), "1 · omarchy")
     compare(Model.channelLabel({ channel: 2, paired: true, name: "" }, t), "2 · paired")
     compare(Model.channelLabel({ channel: 3, paired: false, name: "" }, t), "3 · empty")
+  }
+
+  // A detail read that fails with a known bridge code shows its sentence, not the code.
+  function test_detail_errors_translate_known_codes() {
+    compare(Model.detailError("ambiguous-name", t), "change.ambiguous-name")
+    compare(Model.detailError("timed out", function(key) { return key === "detail.error" ? "Could not read this: %1" : key }),
+      "Could not read this: timed out")
   }
 }

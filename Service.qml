@@ -30,12 +30,18 @@ Item {
   property var _running: null
   property var _warned: ({})
   property var _notices: []
+  // Bump on every change sent; a snapshot records it when it starts and its
+  // answer is dropped when a change went out in the meantime (it was read
+  // before the change could land).
+  property int _generation: 0
+  property int _snapshotGeneration: 0
 
   function refresh() {
     if (snapshotProcess.running) {
       root._again = true
       return
     }
+    root._snapshotGeneration = root._generation
     snapshotProcess.command = root.detailed ? [root.bridgePath, "snapshot", "--details"] : [root.bridgePath, "snapshot"]
     snapshotProcess.running = true
   }
@@ -47,6 +53,7 @@ Item {
     var device = Model.findDevice(root.snap, deviceId)
     if (device === null) return
     root.snap = Model.replaceDevice(root.snap, Model.withChange(device, setting, value))
+    root._generation++
     // A newer change to the same setting replaces one still waiting.
     root._queue = root._queue.filter(function(job) { return job.id !== deviceId || job.setting !== setting })
       .concat([{ id: deviceId, setting: setting, value: value }])
@@ -63,9 +70,10 @@ Item {
   }
 
   function onSnapshot(text) {
-    var next = Model.parseSnapshot(text)
-    // A change still on its way would be undone by a snapshot read before it landed.
+    // A change sent since this snapshot started would be undone by it.
+    if (root._snapshotGeneration !== root._generation) return
     if (changeProcess.running || root._queue.length > 0) return
+    var next = Model.parseSnapshot(text)
     root.snap = next
     var due = Model.warnings(root._warned, next.devices)
     root._warned = due.memory

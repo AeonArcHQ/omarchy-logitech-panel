@@ -7,6 +7,8 @@
 
 var LOW = 15
 var CRITICAL = 5
+// A charge back above this starts a new discharge for the warnings.
+var HYSTERESIS = 20
 var GLYPH = { keyboard: "\u{F030C}", mouse: "\u{F037D}", other: "\u{F030C}" }
 var GLYPH_CHARGING = "\u{F140B}"
 var GLYPH_ALERT = "\u{F0026}"
@@ -16,7 +18,7 @@ var BLOCKERS = ["missing", "agent", "solaar", "incompatible", "bridge"]
 var FIXES = {
   missing: "yay -S openlogi-bin",
   agent: "systemctl --user enable --now openlogi-agent",
-  solaar: "pkill -x solaar",
+  solaar: "systemctl --user disable --now solaar 2>/dev/null; pkill -x solaar",
   incompatible: null,
   bridge: null
 }
@@ -85,7 +87,16 @@ function barView(snap, showPercentage, formatNumber) {
   if (isBlocker(current)) return { text: GLYPH_ALERT, active: true, dimmed: false }
   if (current !== "ready") return { text: GLYPH.keyboard, active: false, dimmed: true }
   var device = barBatteryDevice(snap.devices)
-  if (device === null) return { text: GLYPH[snap.devices[0].kind] || GLYPH.other, active: false, dimmed: true }
+  if (device === null) {
+    // Online Devices without a level still mean "something is on": show the
+    // first one's glyph undimmed; only all-offline dims.
+    var online = null
+    for (var i = 0; i < snap.devices.length; i++) {
+      if (snap.devices[i].online) { online = snap.devices[i]; break }
+    }
+    var shown = online || snap.devices[0]
+    return { text: GLYPH[shown.kind] || GLYPH.other, active: false, dimmed: online === null }
+  }
   var text = GLYPH[device.kind] || GLYPH.other
   if (device.battery.status === "charging") text += " " + GLYPH_CHARGING
   if (showPercentage) text += " " + format(device.battery.percentage) + "%"
@@ -115,28 +126,34 @@ function batteryNote(device, t) {
 }
 
 // Low Battery Warnings due now, and the memory of which thresholds each
-// Device has been warned about in its current discharge. Charging, a full
-// battery or a charge back above LOW starts a new discharge. Offline Devices
-// keep what they had, so a keyboard that sleeps is not warned twice.
+// Device has been warned about in its current discharge, keyed by name
+// because ids change on reconnect (docs/adr/0001). Only charging, a full
+// battery or a charge back above HYSTERESIS starts a new discharge; an
+// "unknown" status and Offline Devices keep what they had, so a keyboard
+// that sleeps or bounces around LOW is not warned twice.
 function warnings(memory, devices) {
   var next = {}
   var notify = []
   for (var key in memory) next[key] = memory[key].slice()
   for (var i = 0; i < devices.length; i++) {
     var device = devices[i]
-    if (!hasBattery(device)) continue
-    var warned = next[device.id] || []
-    var level = device.battery.percentage
-    if (device.battery.status !== "discharging" || level > LOW) {
-      delete next[device.id]
+    if (!device.online) continue
+    var name = String(device.name)
+    var battery = device.battery || {}
+    var status = battery.status
+    var level = typeof battery.percentage === "number" ? battery.percentage : null
+    if (status === "charging" || status === "full" || (status === "discharging" && level !== null && level > HYSTERESIS)) {
+      delete next[name]
       continue
     }
+    if (status !== "discharging" || level === null || level > LOW) continue
+    var warned = next[name] || []
     var threshold = level <= CRITICAL ? CRITICAL : LOW
     if (warned.indexOf(threshold) < 0) {
       notify.push({ id: device.id, name: device.name, threshold: threshold, percentage: level })
       warned = warned.concat(threshold === CRITICAL ? [LOW, CRITICAL] : [LOW])
     }
-    next[device.id] = warned
+    next[name] = warned
   }
   return { memory: next, notify: notify }
 }
@@ -203,7 +220,7 @@ function changeError(text, t) {
   if (!raw || typeof raw !== "object") return t("change.failed")
   if (raw.ok === true) return ""
   var code = String(raw.error || "")
-  var known = ["device-gone", "invalid-change", "missing", "agent", "solaar", "incompatible"]
+  var known = ["device-gone", "invalid-change", "ambiguous-name", "missing", "agent", "solaar", "incompatible"]
   if (known.indexOf(code) >= 0) return t("change." + code)
   return code !== "" ? code : t("change.failed")
 }
@@ -212,4 +229,12 @@ function channelLabel(channel, t) {
   if (!channel.paired) return fill(t("channel.empty"), [channel.channel])
   if (channel.name) return fill(t("channel.named"), [channel.channel, channel.name])
   return fill(t("channel.paired"), [channel.channel])
+}
+
+// A Capability detail OpenLogi could not read, shown at the top of its
+// Section. Bridge codes become their sentence; anything else is OpenLogi's
+// own message.
+function detailError(code, t) {
+  if (code === "ambiguous-name") return t("change.ambiguous-name")
+  return fill(t("detail.error"), [code])
 }

@@ -21,8 +21,11 @@ OpenLogi's background service, the one program that owns the Devices and answers
 _Avoid_: Daemon, server, backend
 
 **Blocker**:
-A condition outside the plugin that keeps it from reaching the Devices: OpenLogi not installed, the Agent not running, or another program (such as Solaar) holding the Device.
+A condition outside the plugin that keeps it from reaching the Devices: OpenLogi not installed, the Agent not running, another program (such as Solaar) holding the Device, or an answer from OpenLogi the plugin cannot read.
 _Avoid_: Error, failure
+
+**Phase**:
+What the panel shows before it can list the Devices: starting, searching, none, a Blocker, or ready.
 
 **Channel**:
 One of a Device's Easy-Switch host slots, numbered from 1. A Channel is either paired with a host or empty.
@@ -36,4 +39,4 @@ The battery the bar icon shows: the lowest charge among the online Devices.
 _Avoid_: Main battery
 
 **Low Battery Warning**:
-A desktop notification sent once per discharge when a Device falls to 15%, and again at 5%.
+A desktop notification sent once per discharge when a Device falls to 15%, and again at 5%. A discharge ends when the Device charges, is full, or climbs back above 20%; a Device that goes offline or reports no level stays in the same discharge. A Device is recognised by its name, so reconnecting does not start a new discharge.

@@ -38,6 +38,7 @@
   "detail.error": "Não deu para ler isto: %1",
   "change.failed": "O OpenLogi não aplicou a mudança.",
   "change.device-gone": "O aparelho saiu de alcance antes de a mudança chegar.",
+  "change.ambiguous-name": "Outro aparelho tem um nome parecido; renomeie um deles para mudar a luz de fundo.",
   "change.invalid-change": "Esse valor não é permitido.",
   "change.missing": "O OpenLogi não está instalado.",
   "change.agent": "O agente do OpenLogi não está rodando.",

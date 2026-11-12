@@ -38,6 +38,7 @@
   "detail.error": "Could not read this: %1",
   "change.failed": "OpenLogi did not apply the change.",
   "change.device-gone": "The device went offline before the change reached it.",
+  "change.ambiguous-name": "Another device has a similar name; rename one to change its backlight.",
   "change.invalid-change": "That value is not allowed.",
   "change.missing": "OpenLogi is not installed.",
   "change.agent": "The OpenLogi agent is not running.",
