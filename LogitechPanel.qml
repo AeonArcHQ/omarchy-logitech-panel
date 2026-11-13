@@ -66,6 +66,12 @@ Panel {
     bar: root.bar
     readonly property var view: Model.barView(root.snap, root.setting("showPercentage", false), root.num)
     text: view.glyph
+    // The keyboard glyph is wide and short, so centred by its bounds it sits
+    // above the taller icons around it. It goes through iconComponent with a
+    // transparent point above its ink: the bar fits and centres the union of
+    // the two, which lowers the glyph by `drop` of its ink height.
+    readonly property real drop: view.glyph === Model.GLYPH.keyboard ? 0.1 : 0
+    iconComponent: drop > 0 ? droppedGlyph : null
     labelText: view.label
     // The label keeps the caption size it had before the entry moved to
     // BarIconButton; the glyph is sized by the shell either way.
@@ -91,6 +97,37 @@ Panel {
       font.family: button.fontFamily
       font.pixelSize: button.fontSize
       text: button.view.label
+    }
+
+    Component {
+      id: droppedGlyph
+      Item {
+        width: glyphText.implicitWidth
+        height: glyphText.implicitHeight
+        Text {
+          id: glyphText
+          textFormat: Text.PlainText
+          text: button.view.glyph
+          font.family: button.fontFamily
+          // Large source so the measured ink keeps its fractions; the bar
+          // scales it down to the shared icon size.
+          font.pixelSize: 100
+          color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+          renderType: Text.CurveRendering
+        }
+        TextMetrics {
+          id: ink
+          font: glyphText.font
+          text: glyphText.text
+        }
+        Rectangle {
+          color: "transparent"
+          width: 1
+          height: 1
+          x: ink.tightBoundingRect.x + ink.tightBoundingRect.width / 2
+          y: glyphText.baselineOffset + ink.tightBoundingRect.y - 2 * button.drop * ink.tightBoundingRect.height
+        }
+      }
     }
   }
 

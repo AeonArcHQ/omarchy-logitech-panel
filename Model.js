@@ -9,7 +9,7 @@ var LOW = 15
 var CRITICAL = 5
 // A charge back above this starts a new discharge for the warnings.
 var HYSTERESIS = 20
-var GLYPH = { keyboard: "\u{F09F9}", mouse: "\u{F037D}", other: "\u{F09F9}" }
+var GLYPH = { keyboard: "\u{F030C}", mouse: "\u{F037D}", other: "\u{F030C}" }
 var GLYPH_CHARGING = "\u{F140B}"
 var GLYPH_ALERT = "\u{F0026}"
 var BLOCKERS = ["missing", "agent", "solaar", "incompatible", "bridge"]
