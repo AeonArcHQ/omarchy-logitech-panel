@@ -60,10 +60,25 @@ Panel {
     readonly property var view: Model.barView(root.snap, root.setting("showPercentage", true), root.num)
     text: view.glyph
     labelText: view.label
+    // Widen the slot so the label fits inside it instead of spilling over the
+    // neighbouring widget, as the shell's battery widget does for its
+    // percentage (shell/plugins/panels/power/Panel.qml). Measured rather than
+    // a fixed 2x because the label can also carry the charging bolt. Label,
+    // gap and icon slot mirror BarIconButton's own content width.
+    slotSize: vertical || view.label === ""
+      ? Style.bar.iconSlot
+      : Math.ceil(labelMetrics.advanceWidth + Style.space(4) + Style.bar.iconSlot)
     active: view.active
     dimmed: view.dimmed
     tooltipText: Model.tooltip(root.snap, root.tr, root.num)
     onPressed: function(buttonCode) { root.toggle() }
+
+    TextMetrics {
+      id: labelMetrics
+      font.family: button.fontFamily
+      font.pixelSize: button.fontSize
+      text: button.view.label
+    }
   }
 
   KeyboardPanel {
