@@ -241,6 +241,28 @@ function keepDetails(previous, snap) {
   }
 }
 
+// Whether the next snapshot read asks for the Capability details: while the
+// panel is open, and until one snapshot with Devices has landed, so the first
+// open does not wait for a second detailed read. A Blocker or an inventory
+// still loading keeps the detailed reads coming.
+function readsDetails(detailed, hasDetails) {
+  return detailed || !hasDetails
+}
+
+// One snapshot answer from the bridge. `readDetailed` records whether this
+// read asked for the Capability details: a detailed read answers for itself,
+// so it replaces what was kept; a plain read carries none, so the fields the
+// last detailed read brought are kept through keepDetails. `hasDetails` says
+// whether this answer lets the reads stop asking for details — only a
+// snapshot with no Blocker that lists Devices counts.
+function applySnapshot(previous, text, readDetailed) {
+  var parsed = parseSnapshot(text)
+  return {
+    snap: readDetailed ? parsed : keepDetails(previous, parsed),
+    hasDetails: !parsed.blocker && parsed.devices.length > 0
+  }
+}
+
 // The bridge's answer to a change: "" when it landed, otherwise the text to
 // show under the block. Bridge codes become sentences; OpenLogi's own
 // messages are shown as they come.

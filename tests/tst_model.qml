@@ -272,6 +272,58 @@ TestCase {
     compare(next.devices, [])
   }
 
+  // The text the bridge prints for one snapshot.
+  function snapshotText(devices, extra) {
+    var raw = { blocker: null, inventory: "ready", devices: devices }
+    for (var key in extra) raw[key] = extra[key]
+    return JSON.stringify(raw)
+  }
+
+  // A detailed read answers for itself: a Device the Agent no longer reports
+  // a backlight Capability for drops the one the last read kept, so the panel
+  // stops offering a control the Device does not have.
+  function test_a_detailed_read_drops_details_the_device_no_longer_reports() {
+    var previous = snapOf([keyboard(details())])
+    var text = snapshotText([keyboard()])
+    var result = Model.applySnapshot(previous, text, true)
+    verify(result.snap.devices[0].backlight === undefined)
+    verify(result.snap.devices[0].fn_lock === undefined)
+    verify(result.snap.devices[0].easy_switch === undefined)
+    compare(result.hasDetails, true)
+  }
+
+  // A plain read carries no Capability details, so applySnapshot keeps what
+  // the last detailed read brought.
+  function test_a_plain_read_keeps_the_last_known_details() {
+    var previous = snapOf([keyboard(details())])
+    var text = snapshotText([keyboard()])
+    var result = Model.applySnapshot(previous, text, false)
+    compare(result.snap.devices[0].backlight.level, 2)
+    compare(result.snap.devices[0].fn_lock, true)
+    compare(result.hasDetails, true)
+  }
+
+  // hasDetails says whether this answer let the panel stop asking for
+  // details: only a snapshot that lists Devices counts. A Blocker or an
+  // inventory still loading keeps the detailed reads coming.
+  function test_has_details_only_when_devices_land() {
+    var blocked = Model.applySnapshot(null, JSON.stringify({ blocker: "agent", inventory: "", devices: [] }), true)
+    compare(blocked.hasDetails, false)
+    var loading = Model.applySnapshot(null, snapshotText([], { inventory: "loading" }), true)
+    compare(loading.hasDetails, false)
+    var ready = Model.applySnapshot(null, snapshotText([keyboard()]), false)
+    compare(ready.hasDetails, true)
+  }
+
+  // The panel reads the Capability details while it is open, and until one
+  // snapshot with Devices has landed so the first open does not wait.
+  function test_reads_details_while_open_or_until_devices_land() {
+    compare(Model.readsDetails(true, true), true)
+    compare(Model.readsDetails(true, false), true)
+    compare(Model.readsDetails(false, true), false)
+    compare(Model.readsDetails(false, false), true)
+  }
+
   // A detail read that fails with a known bridge code shows its sentence, not the code.
   function test_detail_errors_translate_known_codes() {
     compare(Model.detailError("ambiguous-name", t), "change.ambiguous-name")

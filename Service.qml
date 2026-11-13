@@ -48,7 +48,7 @@ Item {
       return
     }
     root._snapshotGeneration = root._generation
-    root._snapshotDetailed = root.detailed || !root._hasDetails
+    root._snapshotDetailed = Model.readsDetails(root.detailed, root._hasDetails)
     snapshotProcess.command = root._snapshotDetailed ? [root.bridgePath, "snapshot", "--details"] : [root.bridgePath, "snapshot"]
     snapshotProcess.running = true
   }
@@ -80,10 +80,12 @@ Item {
     // A change sent since this snapshot started would be undone by it.
     if (root._snapshotGeneration !== root._generation) return
     if (changeProcess.running || root._queue.length > 0) return
-    var next = Model.parseSnapshot(text)
-    if (!next.blocker && next.devices.length > 0) root._hasDetails = true
-    root.snap = root._snapshotDetailed ? next : Model.keepDetails(root.snap, next)
-    var due = Model.warnings(root._warned, next.devices)
+    var result = Model.applySnapshot(root.snap, text, root._snapshotDetailed)
+    // Once a snapshot with Devices lands the reads stop asking for details;
+    // a Blocker or still-searching answer must not take that back.
+    root._hasDetails = root._hasDetails || result.hasDetails
+    root.snap = result.snap
+    var due = Model.warnings(root._warned, result.snap.devices)
     root._warned = due.memory
     if (root.lowBatteryWarnings) {
       for (var i = 0; i < due.notify.length; i++) root.warn(due.notify[i])
