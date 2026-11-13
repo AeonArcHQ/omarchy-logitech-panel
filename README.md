@@ -6,10 +6,10 @@ and Easy-Switch channels.
 Powered by [OpenLogi](https://github.com/AprilNEA/OpenLogi). This project is
 not affiliated with OpenLogi or Logitech.
 
-- The bar shows the device glyph and the lowest battery among the devices
-  that are on, with 󱐋 while charging. The entry takes the warning color at
-  15% or less on battery, and dims while every device is asleep or out of
-  range.
+- The bar shows the device glyph, with 󱐋 while charging, and, with
+  `showPercentage` on, the lowest battery among the devices that are on.
+  The entry takes the warning color at 15% or less on battery, and dims
+  while every device is asleep or out of range.
 - The tooltip has one line per device: `MX Keys Mini — 80%`, or `offline`.
 - A click opens the panel, one block per device: battery state, then the
   sections the device announces to OpenLogi. Backlight: on/off, automatic
@@ -24,7 +24,8 @@ not affiliated with OpenLogi or Logitech.
   its agent stopped, Solaar holding the devices), the bar shows 󰀦 and the
   panel names the problem and the command that fixes it. The plugin never
   installs or starts anything by itself.
-- Settings: `showPercentage` (default on) and `lowBatteryWarnings` (default
+- Settings: `showPercentage` (default off; a right click on the bar entry
+  flips it) and `lowBatteryWarnings` (default
   on).
 - IPC: `omarchy-shell com.aeonarc.logitech-panel open|close|toggle|refresh`.
 

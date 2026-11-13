@@ -20,7 +20,7 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "showPercentage": true,
+      "showPercentage": false,
       "lowBatteryWarnings": true
     },
     "schema": [
@@ -29,7 +29,7 @@
         "type": "boolean",
         "label": "Show percentage",
         "description": "Show the battery percentage next to the device icon. Off leaves only the icon; the tooltip still has every level.",
-        "defaultValue": true
+        "defaultValue": false
       },
       {
         "key": "lowBatteryWarnings",

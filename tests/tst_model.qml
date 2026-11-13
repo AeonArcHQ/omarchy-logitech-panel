@@ -43,15 +43,15 @@ TestCase {
     var low = snapOf([keyboard({ battery: { percentage: 15, status: "discharging" } })])
     compare(Model.barView(low, true).active, true)
     var charging = snapOf([keyboard({ battery: { percentage: 10, status: "charging" } })])
-    compare(Model.barView(charging, true), { glyph: "\u{F030C}", label: "\u{F140B} 10%", active: false, dimmed: false })
-    compare(Model.barView(charging, false), { glyph: "\u{F030C}", label: "\u{F140B}", active: false, dimmed: false })
+    compare(Model.barView(charging, true), { glyph: "\u{F09F9}", label: "\u{F140B} 10%", active: false, dimmed: false })
+    compare(Model.barView(charging, false), { glyph: "\u{F09F9}", label: "\u{F140B}", active: false, dimmed: false })
     var fine = snapOf([keyboard({ battery: { percentage: 16, status: "discharging" } })])
     compare(Model.barView(fine, true).active, false)
   }
 
   function test_numbers_go_through_the_language_formatter() {
     var snap = snapOf([keyboard({ battery: { percentage: 42, status: "discharging" } })])
-    compare(Model.barView(snap, true, function(n) { return "٤٢" }), { glyph: "\u{F030C}", label: "٤٢%", active: false, dimmed: false })
+    compare(Model.barView(snap, true, function(n) { return "٤٢" }), { glyph: "\u{F09F9}", label: "٤٢%", active: false, dimmed: false })
   }
 
   function test_phases_before_devices_show() {
@@ -73,7 +73,7 @@ TestCase {
     compare(Model.barView(null, true).dimmed, true)
     compare(Model.barView({ blocker: null, inventory: "loading", devices: [] }, true).dimmed, true)
     var asleep = snapOf([keyboard({ online: false })])
-    compare(Model.barView(asleep, true), { glyph: "\u{F030C}", label: "", active: false, dimmed: true })
+    compare(Model.barView(asleep, true), { glyph: "\u{F09F9}", label: "", active: false, dimmed: true })
   }
 
   function test_an_online_device_without_a_level_does_not_dim_the_icon() {

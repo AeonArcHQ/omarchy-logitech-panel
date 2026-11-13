@@ -53,13 +53,23 @@ Panel {
     function refresh(): string { logi.refresh(); return "ok" }
   }
 
+  // A right click flips the percentage and saves the choice, as the shell's
+  // battery widget does (shell/plugins/panels/power/Panel.qml).
+  function togglePercentage(): void {
+    root.settings = Object.assign({}, root.settings, { showPercentage: !root.setting("showPercentage", false) })
+    if (root.bar && root.bar.shell) root.bar.shell.updateEntryInline(root.moduleName, root.settings)
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    readonly property var view: Model.barView(root.snap, root.setting("showPercentage", true), root.num)
+    readonly property var view: Model.barView(root.snap, root.setting("showPercentage", false), root.num)
     text: view.glyph
     labelText: view.label
+    // The label keeps the caption size it had before the entry moved to
+    // BarIconButton; the glyph is sized by the shell either way.
+    fontSize: Style.font.caption
     // Widen the slot so the label fits inside it instead of spilling over the
     // neighbouring widget, as the shell's battery widget does for its
     // percentage (shell/plugins/panels/power/Panel.qml). Measured rather than
@@ -71,7 +81,10 @@ Panel {
     active: view.active
     dimmed: view.dimmed
     tooltipText: Model.tooltip(root.snap, root.tr, root.num)
-    onPressed: function(buttonCode) { root.toggle() }
+    onPressed: function(buttonCode) {
+      if (buttonCode === Qt.RightButton) root.togglePercentage()
+      else root.toggle()
+    }
 
     TextMetrics {
       id: labelMetrics
