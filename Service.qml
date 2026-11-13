@@ -35,6 +35,12 @@ Item {
   // before the change could land).
   property int _generation: 0
   property int _snapshotGeneration: 0
+  // Recorded when a read starts, like _snapshotGeneration: whether this read
+  // asks for the Capability details, so onSnapshot knows what it can keep.
+  property bool _snapshotDetailed: false
+  // Reads keep asking for the Capability details until one snapshot with
+  // Devices lands; a Blocker or a still-searching answer keeps them coming.
+  property bool _hasDetails: false
 
   function refresh() {
     if (snapshotProcess.running) {
@@ -42,7 +48,8 @@ Item {
       return
     }
     root._snapshotGeneration = root._generation
-    snapshotProcess.command = root.detailed ? [root.bridgePath, "snapshot", "--details"] : [root.bridgePath, "snapshot"]
+    root._snapshotDetailed = root.detailed || !root._hasDetails
+    snapshotProcess.command = root._snapshotDetailed ? [root.bridgePath, "snapshot", "--details"] : [root.bridgePath, "snapshot"]
     snapshotProcess.running = true
   }
   property bool _again: false
@@ -74,7 +81,8 @@ Item {
     if (root._snapshotGeneration !== root._generation) return
     if (changeProcess.running || root._queue.length > 0) return
     var next = Model.parseSnapshot(text)
-    root.snap = next
+    if (!next.blocker && next.devices.length > 0) root._hasDetails = true
+    root.snap = root._snapshotDetailed ? next : Model.keepDetails(root.snap, next)
     var due = Model.warnings(root._warned, next.devices)
     root._warned = due.memory
     if (root.lowBatteryWarnings) {

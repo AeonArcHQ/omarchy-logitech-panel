@@ -212,6 +212,66 @@ TestCase {
     compare(Model.channelLabel({ channel: 3, paired: false, name: "" }, t), "3 · empty")
   }
 
+  // The Capability details a snapshot read with --details brings.
+  function details() {
+    return {
+      backlight: { on: true, auto: false, level: 2, levels: 8, offers: ["on/off", "auto", "level"] },
+      fn_lock: true,
+      easy_switch: { channel: 1, channels: [{ channel: 1, paired: true, name: "omarchy" }] }
+    }
+  }
+
+  // The plain poll reads no details; the ones the last detailed read brought
+  // are carried over so the panel does not shrink while open.
+  function test_a_plain_snapshot_keeps_the_last_known_details() {
+    var detailed = snapOf([keyboard(details())])
+    var plain = snapOf([keyboard()])
+    var next = Model.keepDetails(detailed, plain)
+    compare(next.devices[0].backlight.level, 2)
+    compare(next.devices[0].fn_lock, true)
+    compare(next.devices[0].easy_switch.channels[0].name, "omarchy")
+    compare(next.inventory, "ready")
+    // keepDetails is pure: the snapshot passed in is not filled in place.
+    verify(plain.devices[0].backlight === undefined)
+    verify(plain.devices[0].fn_lock === undefined)
+  }
+
+  function test_a_detailed_snapshot_replaces_the_details() {
+    var previous = snapOf([keyboard(details())])
+    var fresh = details()
+    fresh.backlight.level = 7
+    fresh.fn_lock = false
+    var next = Model.keepDetails(previous, snapOf([keyboard(fresh)]))
+    compare(next.devices[0].backlight.level, 7)
+    compare(next.devices[0].fn_lock, false)
+  }
+
+  // Ids are route ids that change on reconnect (docs/adr/0001); the name is
+  // what tells the same Device apart.
+  function test_kept_details_follow_the_name_not_the_id() {
+    var previous = snapOf([keyboard(Object.assign(details(), { id: "id-a" }))])
+    var plain = snapOf([keyboard({ id: "id-b" })])
+    compare(Model.keepDetails(previous, plain).devices[0].fn_lock, true)
+  }
+
+  function test_a_device_new_in_the_plain_snapshot_gets_no_details() {
+    var previous = snapOf([keyboard(details())])
+    var plain = snapOf([keyboard(), keyboard({ id: "m", name: "MX Master 3S", kind: "mouse" })])
+    var next = Model.keepDetails(previous, plain)
+    var mouse = Model.findDevice(next, "m")
+    verify(mouse.backlight === undefined)
+    verify(mouse.fn_lock === undefined)
+    verify(mouse.easy_switch === undefined)
+  }
+
+  function test_a_blocker_snapshot_keeps_no_devices() {
+    var previous = snapOf([keyboard(details())])
+    var blocked = { blocker: "agent", inventory: "", devices: [] }
+    var next = Model.keepDetails(previous, blocked)
+    compare(next.blocker, "agent")
+    compare(next.devices, [])
+  }
+
   // A detail read that fails with a known bridge code shows its sentence, not the code.
   function test_detail_errors_translate_known_codes() {
     compare(Model.detailError("ambiguous-name", t), "change.ambiguous-name")

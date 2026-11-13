@@ -13,6 +13,8 @@ var GLYPH = { keyboard: "\u{F030C}", mouse: "\u{F037D}", other: "\u{F030C}" }
 var GLYPH_CHARGING = "\u{F140B}"
 var GLYPH_ALERT = "\u{F0026}"
 var BLOCKERS = ["missing", "agent", "solaar", "incompatible", "bridge"]
+// The Capability details only `snapshot --details` reads.
+var DETAIL_FIELDS = ["backlight", "fn_lock", "easy_switch"]
 // The command that clears each Blocker, shown in the panel; null when the
 // fix is not one command.
 var FIXES = {
@@ -212,6 +214,31 @@ function findDevice(snap, id) {
   if (!snap) return null
   for (var i = 0; i < snap.devices.length; i++) if (snap.devices[i].id === id) return snap.devices[i]
   return null
+}
+
+// A snapshot read without --details carries no Capability details, but the
+// panel keeps showing what the last detailed read brought; carrying the
+// fields over keeps it from shrinking and growing back while open. Devices
+// are matched by name because ids change on reconnect (docs/adr/0001); a
+// field the new read already has is fresh and wins over the kept one.
+function keepDetails(previous, snap) {
+  if (!previous || !snap || snap.blocker || snap.devices.length === 0) return snap
+  var byName = {}
+  for (var i = 0; i < previous.devices.length; i++) byName[String(previous.devices[i].name)] = previous.devices[i]
+  return {
+    blocker: snap.blocker,
+    inventory: snap.inventory,
+    devices: snap.devices.map(function(device) {
+      var known = byName[String(device.name)]
+      if (!known) return device
+      var next = Object.assign({}, device)
+      for (var i = 0; i < DETAIL_FIELDS.length; i++) {
+        var field = DETAIL_FIELDS[i]
+        if (next[field] === undefined && known[field] !== undefined) next[field] = known[field]
+      }
+      return next
+    })
+  }
 }
 
 // The bridge's answer to a change: "" when it landed, otherwise the text to
