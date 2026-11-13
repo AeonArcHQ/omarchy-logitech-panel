@@ -81,6 +81,19 @@ After changing QML, run `omarchy restart shell`; hot reload does not replace
 a panel already loaded. QML errors show up in
 `journalctl --user | grep LogitechPanel.qml`.
 
+`tools/repro-open.sh` restarts the shell, opens the panel and compares a
+capture taken right after opening with one taken 3 s later: it exits 1 (RED)
+when sections arrived late. Pass `reopen` to measure a second opening, and set
+`PANEL_GEOMETRY` (`"x,y wxh"`) to where the panel opens on your monitor.
+
+## Releasing
+
+1. Bump `"version"` in `manifest.json` and commit it as `Release <version>`.
+2. Tag that commit with an annotated tag: `git tag -a v<version> -m v<version>`.
+3. Push the commit and the tag, then wait for the `check` workflow to pass.
+4. Publish a GitHub release for the tag with English notes, one line per
+   change a user can see, linking the issue it closes (`(#1)`).
+
 ## License
 
 MIT.
